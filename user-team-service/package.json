@@ -1,0 +1,29 @@
+{
+  "name": "user-team-service",
+  "version": "1.0.0",
+  "description": "User & Team Service for Resolve platform",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "migrate": "node migrations/runner.js",
+    "db:view": "node src/scripts/viewDb.js",
+    "db:reset": "node src/scripts/resetDb.js",
+    "test": "jest --runInBand --detectOpenHandles",
+    "db:psql": "node src/scripts/psqlView.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 30000
+  }
+}

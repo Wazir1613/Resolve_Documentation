@@ -1,6 +1,15 @@
-### Create a user
-POST http://localhost:8080/api/v1/users?organizationId=11111111-1111-1111-1111-111111111111
+@baseUrl = http://localhost:8080
+@orgId = 11111111-1111-1111-1111-111111111111
+@otherOrgId = 22222222-2222-2222-2222-222222222222
+
+### =========================================================================
+### PHASE 1: USERS MANUAL TESTING SUITE
+### =========================================================================
+
+### 1. Create User (Success 201)
+POST {{baseUrl}}/api/v1/users?organizationId={{orgId}}
 Content-Type: application/json
+Idempotency-Key: test-user-key-001
 
 {
   "email": "jane.doe@resolve.com",
@@ -9,5 +18,220 @@ Content-Type: application/json
   "status": "ACTIVE"
 }
 
-### List users for that organization
-GET http://localhost:8080/api/v1/users?organizationId=11111111-1111-1111-1111-111111111111
+### 2. Missing Idempotency-Key Header (Error 400 IDEMPOTENCY_KEY_REQUIRED)
+POST {{baseUrl}}/api/v1/users?organizationId={{orgId}}
+Content-Type: application/json
+
+{
+  "email": "missing.key@resolve.com",
+  "username": "missing.key",
+  "fullName": "Missing Key User"
+}
+
+### 3. Idempotency Replay (Success 201 - Returns exact original response)
+POST {{baseUrl}}/api/v1/users?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-user-key-001
+
+{
+  "email": "jane.doe@resolve.com",
+  "username": "jane.doe",
+  "fullName": "Jane Doe",
+  "status": "ACTIVE"
+}
+
+### 4. Idempotency Key Reused with Different Body (Error 409 IDEMPOTENCY_KEY_REUSED)
+POST {{baseUrl}}/api/v1/users?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-user-key-001
+
+{
+  "email": "different.body@resolve.com",
+  "username": "different.body",
+  "fullName": "Different Body User"
+}
+
+### 5. Field Validation Failure (Error 400 USER_VALIDATION_ERROR)
+POST {{baseUrl}}/api/v1/users?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-user-key-002
+
+{
+  "email": "invalid-email-address",
+  "fullName": "No Username User"
+}
+
+### 6. Duplicate Email or Username in Same Org (Error 409 USER_EMAIL_TAKEN)
+POST {{baseUrl}}/api/v1/users?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-user-key-003
+
+{
+  "email": "jane.doe@resolve.com",
+  "username": "jane.doe2",
+  "fullName": "Duplicate Email Attempt"
+}
+
+### 7. Same Email in Different Org (Success 201 - Tenant Scoped Uniqueness)
+POST {{baseUrl}}/api/v1/users?organizationId={{otherOrgId}}
+Content-Type: application/json
+Idempotency-Key: test-user-key-004
+
+{
+  "email": "jane.doe@resolve.com",
+  "username": "jane.doe.other",
+  "fullName": "Jane Doe in Org 2"
+}
+
+### 8. List Users (Success 200 with Pagination Shape)
+GET {{baseUrl}}/api/v1/users?organizationId={{orgId}}&page=0&size=10&sort=createdAt,desc
+
+### 9. List Users with Filter (Success 200)
+GET {{baseUrl}}/api/v1/users?organizationId={{orgId}}&email=jane.doe@resolve.com
+
+### 10. Get User By ID (Success 200)
+@userId = <REPLACE_WITH_USER_ID>
+GET {{baseUrl}}/api/v1/users/{{userId}}?organizationId={{orgId}}
+
+### 11. Get User Belonging to Different Org (Error 404 USER_NOT_FOUND)
+GET {{baseUrl}}/api/v1/users/{{userId}}?organizationId={{otherOrgId}}
+
+### 12. Partial Update / Patch User (Success 200)
+PATCH {{baseUrl}}/api/v1/users/{{userId}}?organizationId={{orgId}}
+Content-Type: application/json
+
+{
+  "fullName": "Jane Doe Updated",
+  "status": "INACTIVE"
+}
+
+### 13. Patch User with Invalid Status (Error 400 USER_INVALID_STATUS)
+PATCH {{baseUrl}}/api/v1/users/{{userId}}?organizationId={{orgId}}
+Content-Type: application/json
+
+{
+  "status": "NON_EXISTENT_STATUS"
+}
+
+### 14. Patch User with Colliding Email (Error 409 USER_EMAIL_TAKEN)
+PATCH {{baseUrl}}/api/v1/users/{{userId}}?organizationId={{orgId}}
+Content-Type: application/json
+
+{
+  "email": "another.existing@resolve.com"
+}
+
+
+### =========================================================================
+### PHASE 2: TEAMS MANUAL TESTING SUITE
+### =========================================================================
+
+### 15. Create Team (Success 201)
+POST {{baseUrl}}/api/v1/teams?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-team-key-001
+
+{
+  "name": "Investigations Team"
+}
+
+### 16. Missing Idempotency-Key on Team Create (Error 400 IDEMPOTENCY_KEY_REQUIRED)
+POST {{baseUrl}}/api/v1/teams?organizationId={{orgId}}
+Content-Type: application/json
+
+{
+  "name": "Ops Team"
+}
+
+### 17. Idempotency Replay on Team Create (Success 201 - Returns exact original response)
+POST {{baseUrl}}/api/v1/teams?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-team-key-001
+
+{
+  "name": "Investigations Team"
+}
+
+### 18. Idempotency Reused with Different Body (Error 409 IDEMPOTENCY_KEY_REUSED)
+POST {{baseUrl}}/api/v1/teams?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-team-key-001
+
+{
+  "name": "Different Team Name"
+}
+
+### 19. Team Name Validation Failure (Error 400 TEAM_VALIDATION_ERROR)
+POST {{baseUrl}}/api/v1/teams?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-team-key-002
+
+{
+  "name": "   "
+}
+
+### 20. Duplicate Team Name in Same Org (Error 409 TEAM_NAME_TAKEN)
+POST {{baseUrl}}/api/v1/teams?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-team-key-003
+
+{
+  "name": "Investigations Team"
+}
+
+### 21. Same Team Name in Different Org (Success 201 - Tenant Scoped)
+POST {{baseUrl}}/api/v1/teams?organizationId={{otherOrgId}}
+Content-Type: application/json
+Idempotency-Key: test-team-key-004
+
+{
+  "name": "Investigations Team"
+}
+
+### 22. List Teams (Success 200 Paginated)
+GET {{baseUrl}}/api/v1/teams?organizationId={{orgId}}&page=0&size=10&sort=createdAt,desc
+
+### 23. List Teams with Name Filter (Success 200)
+GET {{baseUrl}}/api/v1/teams?organizationId={{orgId}}&name=Investigations
+
+### 24. Get Team By ID (Success 200)
+# Replace {{teamId}} with the actual id returned from request 15
+@teamId = <REPLACE_WITH_TEAM_ID>
+GET {{baseUrl}}/api/v1/teams/{{teamId}}?organizationId={{orgId}}
+
+### 25. Get Team Belonging to Different Org (Error 404 TEAM_NOT_FOUND)
+GET {{baseUrl}}/api/v1/teams/{{teamId}}?organizationId={{otherOrgId}}
+
+### 26. Rename Team (Success 200)
+PATCH {{baseUrl}}/api/v1/teams/{{teamId}}?organizationId={{orgId}}
+Content-Type: application/json
+
+{
+  "name": "Senior Investigations Team"
+}
+
+### 27. Rename Team to Existing Name (Error 409 TEAM_NAME_TAKEN)
+# Create a second team first, then try to rename it to "Senior Investigations Team"
+POST {{baseUrl}}/api/v1/teams?organizationId={{orgId}}
+Content-Type: application/json
+Idempotency-Key: test-team-key-005
+
+{
+  "name": "Second Team"
+}
+
+### (Try to rename Second Team to Senior Investigations Team)
+# Replace {{secondTeamId}} with id from above
+@secondTeamId = <REPLACE_WITH_SECOND_TEAM_ID>
+PATCH {{baseUrl}}/api/v1/teams/{{secondTeamId}}?organizationId={{orgId}}
+Content-Type: application/json
+
+{
+  "name": "Senior Investigations Team"
+}
+
+### 28. Delete Team (Success 204 No Content)
+DELETE {{baseUrl}}/api/v1/teams/{{secondTeamId}}?organizationId={{orgId}}
+
+### 29. Verify Deleted Team Returns 404 TEAM_NOT_FOUND
+GET {{baseUrl}}/api/v1/teams/{{secondTeamId}}?organizationId={{orgId}}

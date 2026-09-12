@@ -27,6 +27,29 @@ function toPublicUser(row) {
   };
 }
 
+function toInternalLookupUser(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    status: row.status,
+  };
+}
+
+function toInternalStatusUser(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    fullName: row.full_name,
+    status: row.status,
+  };
+}
+
 function isUniqueViolation(err) {
   return err && err.code === '23505';
 }
@@ -129,11 +152,64 @@ async function updateUser(id, organizationId, fields) {
   return toPublicUser(result.rows[0]);
 }
 
+function toInternalCredentialUser(row) {
+  if (!row) {
+    return null;
+  }
+  return {
+    organizationId: row.organization_id,
+    status: row.status,
+    passwordHash: row.password_hash,
+  };
+}
+
+async function findForInternalLookup({ organizationId, email }) {
+  const result = await pool.query(
+    `SELECT id, organization_id, status
+     FROM users
+     WHERE organization_id::text = $1 AND email = $2`,
+    [organizationId, email]
+  );
+  return toInternalLookupUser(result.rows[0]);
+}
+
+async function findCredentialRecordById(id) {
+  const result = await pool.query(
+    'SELECT organization_id, status, password_hash FROM users WHERE id = $1',
+    [id]
+  );
+  return toInternalCredentialUser(result.rows[0]);
+}
+
+async function updatePasswordHash(id, passwordHash) {
+  const result = await pool.query(
+    `UPDATE users
+     SET password_hash = $1, updated_at = now()
+     WHERE id = $2`,
+    [passwordHash, id]
+  );
+  return result.rowCount > 0;
+}
+
+async function findInternalStatusById(id) {
+  const result = await pool.query(
+    `SELECT id, organization_id, full_name, status
+     FROM users
+     WHERE id = $1`,
+    [id]
+  );
+  return toInternalStatusUser(result.rows[0]);
+}
+
 module.exports = {
   insertUser,
   findByIdInOrg,
   listUsers,
   updateUser,
+  findForInternalLookup,
+  findCredentialRecordById,
+  updatePasswordHash,
+  findInternalStatusById,
   isUniqueViolation,
   toPublicUser,
 };

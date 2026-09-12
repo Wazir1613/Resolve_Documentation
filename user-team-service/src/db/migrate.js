@@ -14,6 +14,18 @@ async function runMigrations(db = pool) {
     )
   `);
 
+  const migrationColumns = await db.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = current_schema() AND table_name = 'schema_migrations'`
+  );
+  const columnNames = new Set(migrationColumns.rows.map((row) => row.column_name));
+  const migrationColumn = columnNames.has('filename') ? 'filename' : 'version';
+
+  if (!columnNames.has(migrationColumn)) {
+    throw new Error('schema_migrations must include a filename or version column');
+  }
+
   const files = fs
     .readdirSync(MIGRATIONS_DIR)
     .filter((name) => /^\d+_.*\.sql$/.test(name))
@@ -21,7 +33,7 @@ async function runMigrations(db = pool) {
 
   for (const filename of files) {
     const alreadyApplied = await db.query(
-      'SELECT 1 FROM schema_migrations WHERE filename = $1',
+      `SELECT 1 FROM schema_migrations WHERE ${migrationColumn} = $1`,
       [filename]
     );
     if (alreadyApplied.rowCount > 0) {
@@ -33,7 +45,7 @@ async function runMigrations(db = pool) {
     try {
       await client.query('BEGIN');
       await client.query(sql);
-      await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [filename]);
+      await client.query(`INSERT INTO schema_migrations (${migrationColumn}) VALUES ($1)`, [filename]);
       await client.query('COMMIT');
       console.log(`Applied migration ${filename}`);
     } catch (err) {

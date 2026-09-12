@@ -1,27 +1,19 @@
 require('dotenv').config();
+
 const app = require('./app');
-const { runMigrations } = require('../migrations/runner');
 const { pool } = require('./db/pool');
+const { runMigrations } = require('./db/migrate');
 
-const PORT = process.env.PORT || 8080;
+const PORT = Number(process.env.PORT) || 8080;
 
-async function startServer() {
-  try {
-    console.log('Checking and running database migrations...');
-    await runMigrations(pool);
-    console.log('Database migrations successfully applied.');
-
-    app.listen(PORT, () => {
-      console.log(`User & Team Service is running on port ${PORT}`);
-    });
-  } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-  }
+async function start() {
+  await runMigrations(pool);
+  app.listen(PORT, () => {
+    console.log(`User & Team Service listening on port ${PORT}`);
+  });
 }
 
-if (require.main === module) {
-  startServer();
-}
-
-module.exports = { startServer };
+start().catch((err) => {
+  console.error('Failed to start server', err);
+  process.exit(1);
+});

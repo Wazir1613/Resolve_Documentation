@@ -1,110 +1,86 @@
-const usersRepo = require('./users.repository');
-const { parsePagination, formatPaginatedResponse } = require('../utils/pagination');
-const { AppError } = require('../utils/errors');
-const { UUID_REGEX } = require('./users.validation');
+const { HttpError } = require('../middleware/errorHandler');
+const { parsePagination, paginatedResponse } = require('../utils/pagination');
+const usersRepository = require('./users.repository');
 
-const ALLOWED_USER_SORT_FIELDS = {
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
-  email: 'email',
-  username: 'username',
-  fullName: 'full_name',
-  status: 'status'
-};
+function uniqueTakenError() {
+  return new HttpError(409, 'USER_EMAIL_TAKEN', 'Email or username already exists in this organization');
+}
 
-async function createUser(req, res, next) {
+async function createUser(req, res) {
   try {
-    const { organizationId } = req.query;
-    const { email, username, fullName, status } = req.body || {};
-
-    // password_hash is deliberately ignored if passed
-    const user = await usersRepo.createUser({
-      organizationId,
-      email,
-      username,
-      fullName,
-      status: status || 'ACTIVE'
+    const user = await usersRepository.insertUser({
+      organizationId: req.organizationId,
+      email: req.validatedBody.email,
+      username: req.validatedBody.username,
+      fullName: req.validatedBody.fullName,
+      status: req.validatedBody.status || 'ACTIVE',
     });
-
     res.status(201).json(user);
   } catch (err) {
-    next(err);
+    if (usersRepository.isUniqueViolation(err)) {
+      throw uniqueTakenError();
+    }
+    throw err;
   }
 }
 
-async function listUsers(req, res, next) {
-  try {
-    const { organizationId, email, username, status } = req.query;
+const USER_SORT_COLUMNS = new Set([
+  'created_at',
+  'updated_at',
+  'email',
+  'username',
+  'full_name',
+  'status',
+]);
 
-    const { page, size, sortColumn, sortOrder, limit, offset } = parsePagination(
-      req.query,
-      ALLOWED_USER_SORT_FIELDS,
-      'createdAt,desc'
-    );
+async function listUsers(req, res) {
+  const pagination = parsePagination(req.query);
+  const sortColumn = USER_SORT_COLUMNS.has(pagination.sortColumn)
+    ? pagination.sortColumn
+    : 'created_at';
+  const { rows, totalElements } = await usersRepository.listUsers({
+    organizationId: req.organizationId,
+    email: req.query.email,
+    username: req.query.username,
+    status: req.query.status,
+    limit: pagination.size,
+    offset: pagination.offset,
+    sortColumn,
+    sortDirection: pagination.sortDirection,
+  });
 
-    const { content, totalElements } = await usersRepo.findUsers({
-      organizationId,
-      email,
-      username,
-      status,
-      limit,
-      offset,
-      sortColumn,
-      sortOrder
-    });
-
-    res.status(200).json(formatPaginatedResponse(content, page, size, totalElements));
-  } catch (err) {
-    next(err);
-  }
+  res.status(200).json(
+    paginatedResponse({
+      content: rows,
+      page: pagination.page,
+      size: pagination.size,
+      totalElements,
+    })
+  );
 }
 
-async function getUserById(req, res, next) {
+async function getUserById(req, res) {
+  const user = await usersRepository.findByIdInOrg(req.params.id, req.organizationId);
+  if (!user) {
+    throw new HttpError(404, 'USER_NOT_FOUND', 'User not found');
+  }
+  res.status(200).json(user);
+}
+
+async function patchUser(req, res) {
+  const existing = await usersRepository.findByIdInOrg(req.params.id, req.organizationId);
+  if (!existing) {
+    throw new HttpError(404, 'USER_NOT_FOUND', 'User not found');
+  }
+
   try {
-    const { id } = req.params;
-    const { organizationId } = req.query;
-
-    if (!UUID_REGEX.test(id) || !organizationId || !UUID_REGEX.test(organizationId)) {
-      return next(new AppError(404, 'USER_NOT_FOUND', 'User not found'));
-    }
-
-    const user = await usersRepo.findUserById(id, organizationId);
-    if (!user) {
-      return next(new AppError(404, 'USER_NOT_FOUND', 'User not found'));
-    }
-
+    const user = await usersRepository.updateUser(req.params.id, req.organizationId, req.validatedBody);
     res.status(200).json(user);
   } catch (err) {
-    next(err);
-  }
-}
-
-async function patchUser(req, res, next) {
-  try {
-    const { id } = req.params;
-    const { organizationId } = req.query;
-
-    if (!UUID_REGEX.test(id)) {
-      return next(new AppError(404, 'USER_NOT_FOUND', 'User not found'));
+    if (usersRepository.isUniqueViolation(err)) {
+      throw uniqueTakenError();
     }
-
-    const existingUser = await usersRepo.findUserById(id, organizationId);
-    if (!existingUser) {
-      return next(new AppError(404, 'USER_NOT_FOUND', 'User not found'));
-    }
-
-    const { email, username, fullName, status } = req.body || {};
-
-    const updatedUser = await usersRepo.updateUser(id, organizationId, {
-      email,
-      username,
-      fullName,
-      status
-    });
-
-    res.status(200).json(updatedUser);
-  } catch (err) {
-    next(err);
+    throw err;
   }
 }
 
@@ -112,5 +88,5 @@ module.exports = {
   createUser,
   listUsers,
   getUserById,
-  patchUser
+  patchUser,
 };

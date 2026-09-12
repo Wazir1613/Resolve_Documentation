@@ -1,46 +1,51 @@
-const { AppError } = require('../utils/errors');
+const crypto = require('crypto');
+const { HttpError } = require('./errorHandler');
 
-// In-memory Map for storing seen idempotency keys.
-// NOTE: Production implementation would use Redis with TTL (e.g. 24 hours) for distributed multi-instance storage.
-const idempotencyStore = new Map();
+// Production would use Redis. In-memory Map is acceptable for this local build.
+const seenKeys = new Map();
+
+function bodyHash(body) {
+  return crypto.createHash('sha256').update(JSON.stringify(body ?? {})).digest('hex');
+}
 
 function idempotencyMiddleware(req, res, next) {
-  const idempotencyKey = req.header('Idempotency-Key');
-
-  if (!idempotencyKey) {
-    return next(new AppError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Idempotency-Key header is required'));
+  const key = req.get('Idempotency-Key');
+  if (!key) {
+    return next(
+      new HttpError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Idempotency-Key header is required')
+    );
   }
 
-  const currentBodyString = JSON.stringify(req.body || {});
+  const hash = bodyHash(req.body);
+  const existing = seenKeys.get(key);
 
-  if (idempotencyStore.has(idempotencyKey)) {
-    const cached = idempotencyStore.get(idempotencyKey);
-    if (cached.bodyString === currentBodyString) {
-      // Replay exact original response
-      return res.status(cached.status).json(cached.body);
-    } else {
-      return next(new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'Idempotency-Key was already used with a different request body'));
+  if (existing) {
+    if (existing.hash !== hash) {
+      return next(
+        new HttpError(
+          409,
+          'IDEMPOTENCY_KEY_REUSED',
+          'Idempotency-Key was already used with a different request body'
+        )
+      );
     }
+
+    return res.status(existing.status).json(existing.body);
   }
 
-  // Intercept res.send / res.json to cache response
   const originalJson = res.json.bind(res);
-
   res.json = (body) => {
-    // Cache the response
-    idempotencyStore.set(idempotencyKey, {
-      bodyString: currentBodyString,
-      status: res.statusCode,
-      body
-    });
-
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      seenKeys.set(key, { hash, status: res.statusCode, body });
+    }
     return originalJson(body);
   };
 
-  next();
+  return next();
 }
 
-module.exports = {
-  idempotencyMiddleware,
-  idempotencyStore // exported for testing / cache clearing if needed
-};
+function resetIdempotencyStore() {
+  seenKeys.clear();
+}
+
+module.exports = { idempotencyMiddleware, resetIdempotencyStore };

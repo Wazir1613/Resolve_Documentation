@@ -1,102 +1,92 @@
-const { AppError } = require('../utils/errors');
+const { z } = require('zod');
+const { HttpError } = require('../middleware/errorHandler');
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const VALID_STATUSES = ['ACTIVE', 'INACTIVE', 'SUSPENDED'];
+const STATUSES = ['ACTIVE', 'INACTIVE', 'SUSPENDED'];
 
-function validateCreateUser(req, res, next) {
-  const errors = [];
-  const { organizationId } = req.query;
-  const { email, username, fullName, status } = req.body || {};
+const uuidSchema = z.string().uuid();
 
-  if (!organizationId) {
-    errors.push({ field: 'organizationId', code: 'REQUIRED', message: 'organizationId query parameter is required' });
-  } else if (!UUID_REGEX.test(organizationId)) {
-    errors.push({ field: 'organizationId', code: 'INVALID_FORMAT', message: 'organizationId must be a valid UUID' });
-  }
+const createUserBodySchema = z.object({
+  email: z.string().email(),
+  username: z.string().min(1).max(100),
+  fullName: z.string().min(1).max(255),
+  status: z.enum(STATUSES).optional(),
+});
 
-  if (!email) {
-    errors.push({ field: 'email', code: 'REQUIRED', message: 'email is required' });
-  } else if (!EMAIL_REGEX.test(email)) {
-    errors.push({ field: 'email', code: 'INVALID_FORMAT', message: 'email must be a valid email address' });
-  }
+const patchUserBodySchema = z.object({
+  email: z.string().email().optional(),
+  username: z.string().min(1).max(100).optional(),
+  fullName: z.string().min(1).max(255).optional(),
+  status: z.string().optional(),
+});
 
-  if (!username) {
-    errors.push({ field: 'username', code: 'REQUIRED', message: 'username is required' });
-  } else if (typeof username !== 'string' || username.trim() === '') {
-    errors.push({ field: 'username', code: 'INVALID_FORMAT', message: 'username must not be empty' });
-  }
-
-  if (!fullName) {
-    errors.push({ field: 'fullName', code: 'REQUIRED', message: 'fullName is required' });
-  } else if (typeof fullName !== 'string' || fullName.length > 255) {
-    errors.push({ field: 'fullName', code: 'INVALID_LENGTH', message: 'fullName must not exceed 255 characters' });
-  }
-
-  if (status !== undefined && !VALID_STATUSES.includes(status)) {
-    errors.push({ field: 'status', code: 'INVALID_VALUE', message: 'status must be one of ACTIVE, INACTIVE, SUSPENDED' });
-  }
-
-  if (errors.length > 0) {
-    return next(new AppError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', errors));
-  }
-
-  next();
+function fieldErrorsFromZod(err) {
+  return err.issues.map((issue) => ({
+    field: issue.path.join('.') || 'body',
+    code: issue.code === 'invalid_string' && issue.validation === 'email' ? 'INVALID_FORMAT' : 'INVALID_VALUE',
+    message: issue.message,
+  }));
 }
 
-function validateListUsers(req, res, next) {
-  const errors = [];
-  const { organizationId } = req.query;
-
-  if (!organizationId) {
-    errors.push({ field: 'organizationId', code: 'REQUIRED', message: 'organizationId query parameter is required' });
-  } else if (!UUID_REGEX.test(organizationId)) {
-    errors.push({ field: 'organizationId', code: 'INVALID_FORMAT', message: 'organizationId must be a valid UUID' });
+function requireOrganizationId(req, res, next) {
+  const parsed = uuidSchema.safeParse(req.query.organizationId);
+  if (!parsed.success) {
+    return next(
+      new HttpError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', [
+        {
+          field: 'organizationId',
+          code: 'INVALID_FORMAT',
+          message: 'organizationId query parameter must be a valid UUID',
+        },
+      ])
+    );
   }
+  req.organizationId = parsed.data;
+  return next();
+}
 
-  if (errors.length > 0) {
-    return next(new AppError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', errors));
+function validateCreateUser(req, res, next) {
+  const body = { ...req.body };
+  delete body.password_hash;
+  delete body.passwordHash;
+  const parsed = createUserBodySchema.safeParse(body);
+  if (!parsed.success) {
+    return next(
+      new HttpError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
+    );
   }
-
-  next();
+  req.validatedBody = parsed.data;
+  return next();
 }
 
 function validatePatchUser(req, res, next) {
-  const { organizationId } = req.query;
-  const { status, email, fullName } = req.body || {};
-
-  if (!organizationId || !UUID_REGEX.test(organizationId)) {
-    return next(new AppError(400, 'USER_VALIDATION_ERROR', 'organizationId query parameter is required and must be a valid UUID', [
-      { field: 'organizationId', code: organizationId ? 'INVALID_FORMAT' : 'REQUIRED', message: 'organizationId is required and must be a valid UUID' }
-    ]));
+  const body = { ...req.body };
+  delete body.password_hash;
+  delete body.passwordHash;
+  const parsed = patchUserBodySchema.safeParse(body);
+  if (!parsed.success) {
+    return next(
+      new HttpError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
+    );
   }
-
-  // Explicit requirement: 400 — USER_INVALID_STATUS if status isn't one of the 3 valid values
-  if (status !== undefined && !VALID_STATUSES.includes(status)) {
-    return next(new AppError(400, 'USER_INVALID_STATUS', "Status must be one of 'ACTIVE', 'INACTIVE', or 'SUSPENDED'"));
+  if (parsed.data.status !== undefined && !STATUSES.includes(parsed.data.status)) {
+    return next(new HttpError(400, 'USER_INVALID_STATUS', 'status must be one of ACTIVE, INACTIVE, SUSPENDED'));
   }
+  req.validatedBody = parsed.data;
+  return next();
+}
 
-  const errors = [];
-  if (email !== undefined) {
-    if (!EMAIL_REGEX.test(email)) {
-      errors.push({ field: 'email', code: 'INVALID_FORMAT', message: 'email must be a valid email address' });
-    }
+function validateUserIdParam(req, res, next) {
+  const parsed = uuidSchema.safeParse(req.params.id);
+  if (!parsed.success) {
+    return next(new HttpError(404, 'USER_NOT_FOUND', 'User not found'));
   }
-
-  if (fullName !== undefined && (typeof fullName !== 'string' || fullName.length > 255)) {
-    errors.push({ field: 'fullName', code: 'INVALID_LENGTH', message: 'fullName must not exceed 255 characters' });
-  }
-
-  if (errors.length > 0) {
-    return next(new AppError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', errors));
-  }
-
-  next();
+  return next();
 }
 
 module.exports = {
+  STATUSES,
+  requireOrganizationId,
   validateCreateUser,
-  validateListUsers,
   validatePatchUser,
-  UUID_REGEX
+  validateUserIdParam,
 };

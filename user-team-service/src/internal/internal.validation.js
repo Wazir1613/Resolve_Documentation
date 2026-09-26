@@ -13,28 +13,20 @@ const lookupQuerySchema = z.object({
 });
 
 const credentialBodySchema = z.object({
-  passwordHash: z.string().min(1).optional(),
-  plaintextPassword: z.string().min(1).optional(),
-}).refine((value) => value.passwordHash || value.plaintextPassword, {
-  path: ['plaintextPassword'],
-  message: 'plaintextPassword is required',
+  plaintextPassword: z.string().min(1, 'plaintextPassword is required'),
 });
 
 const passwordUpdateBodySchema = z.object({
-  passwordHash: z.string().min(1).optional(),
-  newPlaintextPassword: z.string().min(1).optional(),
-}).refine((value) => value.passwordHash || value.newPlaintextPassword, {
-  path: ['newPlaintextPassword'],
-  message: 'newPlaintextPassword is required',
+  newPlaintextPassword: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
 function fieldErrorsFromZod(err) {
   return err.issues.map((issue) => ({
     field: issue.path.join('.') || 'body',
     code:
-      issue.code === 'invalid_string' && (issue.validation === 'email' || issue.validation === 'uuid')
-        ? 'INVALID_FORMAT'
-        : 'INVALID_VALUE',
+        issue.code === 'invalid_string' && (issue.validation === 'email' || issue.validation === 'uuid')
+            ? 'INVALID_FORMAT'
+            : 'INVALID_VALUE',
     message: issue.message,
   }));
 }
@@ -43,7 +35,7 @@ function validateLookupQuery(req, res, next) {
   const parsed = lookupQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     return next(
-      new HttpError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
+        new HttpError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
     );
   }
   req.validatedQuery = parsed.data;
@@ -62,7 +54,7 @@ function validateCredentialBody(req, res, next) {
   const parsed = credentialBodySchema.safeParse(req.body);
   if (!parsed.success) {
     return next(
-      new HttpError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
+        new HttpError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
     );
   }
   req.validatedBody = parsed.data;
@@ -73,7 +65,7 @@ function validatePasswordUpdateBody(req, res, next) {
   const parsed = passwordUpdateBodySchema.safeParse(req.body);
   if (!parsed.success) {
     return next(
-      new HttpError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
+        new HttpError(400, 'USER_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
     );
   }
   req.validatedBody = parsed.data;

@@ -1,0 +1,223 @@
+openapi: 3.0.3
+info:
+  title: Resolve User & Team Service
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8080
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string }
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        email: { type: string }
+        username: { type: string }
+        fullName: { type: string }
+        status: { type: string, enum: [ACTIVE, INACTIVE, SUSPENDED] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+    Team:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        name: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      security: []
+      responses:
+        "200": { description: OK }
+
+  /api/v1/users:
+    post:
+      summary: Create a user
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, username, fullName]
+              properties:
+                email: { type: string }
+                username: { type: string }
+                fullName: { type: string }
+                status: { type: string, enum: [ACTIVE, INACTIVE, SUSPENDED] }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+    get:
+      summary: List users
+      parameters:
+        - { name: email, in: query, schema: { type: string } }
+        - { name: username, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: size, in: query, schema: { type: integer } }
+        - { name: sort, in: query, schema: { type: string } }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/users/{id}:
+    get:
+      summary: Get one user
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
+        "404": { description: Not found }
+    patch:
+      summary: Update a user
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                username: { type: string }
+                fullName: { type: string }
+                status: { type: string, enum: [ACTIVE, INACTIVE, SUSPENDED] }
+      responses:
+        "200": { description: OK }
+    delete:
+      summary: Deactivate a user
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Deactivated }
+
+  /api/v1/teams:
+    post:
+      summary: Create a team
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Team' } } } }
+    get:
+      summary: List teams
+      parameters:
+        - { name: name, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: size, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/teams/{id}:
+    get:
+      summary: Get one team
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK }
+    patch:
+      summary: Rename a team
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [name], properties: { name: { type: string } } }
+      responses:
+        "200": { description: OK }
+    delete:
+      summary: Delete a team
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "204": { description: Deleted }
+
+  /api/v1/teams/{id}/members:
+    post:
+      summary: Add a team member
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [userId], properties: { userId: { type: string, format: uuid } } }
+      responses:
+        "201": { description: Added }
+    get:
+      summary: List team members
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK }
+
+  /api/v1/teams/{id}/members/{userId}:
+    delete:
+      summary: Remove a team member
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Removed }
+
+  /internal/v1/users/lookup:
+    get:
+      summary: Internal user lookup by org + email
+      security: []
+      parameters:
+        - { name: organizationId, in: query, schema: { type: string, format: uuid } }
+        - { name: email, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK }
+
+  /internal/v1/users/{id}/verify-credentials:
+    post:
+      summary: Verify credentials (internal)
+      security: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { plaintextPassword: { type: string } } }
+      responses:
+        "200": { description: OK }
+
+  /internal/v1/users/{id}/password-hash:
+    patch:
+      summary: Set password (internal)
+      security: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { newPlaintextPassword: { type: string } } }
+      responses:
+        "204": { description: Updated }
+
+  /internal/v1/users/{id}:
+    get:
+      summary: Internal user status check
+      security: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK }

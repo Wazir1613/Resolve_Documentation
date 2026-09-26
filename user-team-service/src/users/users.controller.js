@@ -36,8 +36,8 @@ const USER_SORT_COLUMNS = new Set([
 async function listUsers(req, res) {
   const pagination = parsePagination(req.query);
   const sortColumn = USER_SORT_COLUMNS.has(pagination.sortColumn)
-    ? pagination.sortColumn
-    : 'created_at';
+      ? pagination.sortColumn
+      : 'created_at';
   const { rows, totalElements } = await usersRepository.listUsers({
     organizationId: req.organizationId,
     email: req.query.email,
@@ -50,12 +50,12 @@ async function listUsers(req, res) {
   });
 
   res.status(200).json(
-    paginatedResponse({
-      content: rows,
-      page: pagination.page,
-      size: pagination.size,
-      totalElements,
-    })
+      paginatedResponse({
+        content: rows,
+        page: pagination.page,
+        size: pagination.size,
+        totalElements,
+      })
   );
 }
 
@@ -84,9 +84,19 @@ async function patchUser(req, res) {
   }
 }
 
+async function deactivateUser(req, res) {
+  const existing = await usersRepository.findByIdInOrg(req.params.id, req.organizationId);
+  if (!existing) {
+    throw new HttpError(404, 'USER_NOT_FOUND', 'User not found');
+  }
+  await usersRepository.updateUser(req.params.id, req.organizationId, { status: 'INACTIVE' });
+  res.status(204).send();
+}
+
 module.exports = {
   createUser,
   listUsers,
   getUserById,
   patchUser,
+  deactivateUser,
 };

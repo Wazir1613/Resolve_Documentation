@@ -1,10 +1,9 @@
-// TEMPORARY: no auth enforced. Replace with real JWT validation once Authentication service exists.
 const express = require('express');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { idempotencyMiddleware } = require('../middleware/idempotency');
+const { authenticate } = require('../middleware/authenticate');
 const usersController = require('./users.controller');
 const {
-  requireOrganizationId,
   validateCreateUser,
   validatePatchUser,
   validateUserIdParam,
@@ -13,28 +12,35 @@ const {
 const router = express.Router();
 
 router.post(
-  '/',
-  idempotencyMiddleware,
-  requireOrganizationId,
-  validateCreateUser,
-  asyncHandler(usersController.createUser)
+    '/',
+    idempotencyMiddleware,
+    authenticate,
+    validateCreateUser,
+    asyncHandler(usersController.createUser)
 );
 
-router.get('/', requireOrganizationId, asyncHandler(usersController.listUsers));
+router.get('/', authenticate, asyncHandler(usersController.listUsers));
 
 router.get(
-  '/:id',
-  requireOrganizationId,
-  validateUserIdParam,
-  asyncHandler(usersController.getUserById)
+    '/:id',
+    authenticate,
+    validateUserIdParam,
+    asyncHandler(usersController.getUserById)
 );
 
 router.patch(
-  '/:id',
-  requireOrganizationId,
-  validateUserIdParam,
-  validatePatchUser,
-  asyncHandler(usersController.patchUser)
+    '/:id',
+    authenticate,
+    validateUserIdParam,
+    validatePatchUser,
+    asyncHandler(usersController.patchUser)
+);
+
+router.delete(
+    '/:id',
+    authenticate,
+    validateUserIdParam,
+    asyncHandler(usersController.deactivateUser)
 );
 
 module.exports = router;

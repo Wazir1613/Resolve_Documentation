@@ -23,28 +23,11 @@ function fieldErrorsFromZod(err) {
   }));
 }
 
-function requireOrganizationId(req, res, next) {
-  const parsed = uuidSchema.safeParse(req.query.organizationId);
-  if (!parsed.success) {
-    return next(
-      new HttpError(400, 'TEAM_VALIDATION_ERROR', 'Request validation failed', [
-        {
-          field: 'organizationId',
-          code: 'INVALID_FORMAT',
-          message: 'organizationId query parameter must be a valid UUID',
-        },
-      ])
-    );
-  }
-  req.organizationId = parsed.data;
-  return next();
-}
-
 function validateCreateTeam(req, res, next) {
   const parsed = createTeamBodySchema.safeParse(req.body);
   if (!parsed.success) {
     return next(
-      new HttpError(400, 'TEAM_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
+        new HttpError(400, 'TEAM_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
     );
   }
   req.validatedBody = parsed.data;
@@ -55,7 +38,7 @@ function validatePatchTeam(req, res, next) {
   const parsed = patchTeamBodySchema.safeParse(req.body);
   if (!parsed.success) {
     return next(
-      new HttpError(400, 'TEAM_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
+        new HttpError(400, 'TEAM_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
     );
   }
   req.validatedBody = parsed.data;
@@ -66,7 +49,7 @@ function validateAddMember(req, res, next) {
   const parsed = addMemberBodySchema.safeParse(req.body);
   if (!parsed.success) {
     return next(
-      new HttpError(400, 'TEAM_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
+        new HttpError(400, 'TEAM_VALIDATION_ERROR', 'Request validation failed', fieldErrorsFromZod(parsed.error))
     );
   }
   req.validatedBody = parsed.data;
@@ -90,7 +73,6 @@ function validateMemberUserIdParam(req, res, next) {
 }
 
 module.exports = {
-  requireOrganizationId,
   validateCreateTeam,
   validatePatchTeam,
   validateAddMember,

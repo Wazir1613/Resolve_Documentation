@@ -1,5 +1,8 @@
+const bcrypt = require('bcryptjs');
 const { HttpError } = require('../middleware/errorHandler');
 const usersRepository = require('../users/users.repository');
+
+const SALT_ROUNDS = 10;
 
 function userNotFoundError() {
   return new HttpError(404, 'USER_NOT_FOUND', 'User not found');
@@ -7,7 +10,6 @@ function userNotFoundError() {
 
 async function lookupUser(req, res) {
   // TODO: production should call Organization Service before this endpoint when only a slug is available.
-  // Local compatibility: organizationSlug is treated as the textual organization_id value.
   const user = await usersRepository.findForInternalLookup({
     organizationId: req.validatedQuery.organizationId || req.validatedQuery.organizationSlug,
     email: req.validatedQuery.email,
@@ -19,26 +21,23 @@ async function lookupUser(req, res) {
 }
 
 async function verifyCredentials(req, res) {
-  // TODO: replace this local string equality check with the agreed bcrypt/argon2 boundary once Authentication lands.
   const user = await usersRepository.findCredentialRecordById(req.params.id);
-  if (!user) {
+  if (!user || !user.passwordHash) {
     throw userNotFoundError();
   }
-  const provided = req.validatedBody.plaintextPassword || req.validatedBody.passwordHash;
-  if (req.validatedBody.passwordHash) {
-    res.status(200).json({ match: user.passwordHash === provided });
-    return;
-  }
+
+  const valid = await bcrypt.compare(req.validatedBody.plaintextPassword, user.passwordHash);
+
   res.status(200).json({
-    valid: user.passwordHash === provided,
+    valid,
     status: user.status,
     organizationId: user.organizationId,
   });
 }
 
 async function patchPasswordHash(req, res) {
-  const password = req.validatedBody.newPlaintextPassword || req.validatedBody.passwordHash;
-  const updated = await usersRepository.updatePasswordHash(req.params.id, password);
+  const hash = await bcrypt.hash(req.validatedBody.newPlaintextPassword, SALT_ROUNDS);
+  const updated = await usersRepository.updatePasswordHash(req.params.id, hash);
   if (!updated) {
     throw userNotFoundError();
   }

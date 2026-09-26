@@ -17,9 +17,14 @@
     "testTimeout": 15000
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "jose": "^6.2.12",
     "pg": "^8.13.1",
+    "swagger-ui-express": "^5.0.1",
+    "yamljs": "^0.3.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

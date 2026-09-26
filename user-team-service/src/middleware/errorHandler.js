@@ -1,5 +1,7 @@
-class HttpError extends Error {
-  constructor(status, code, message, errors) {
+class HttpError extends Error
+{
+  constructor(status, code, message, errors)
+  {
     super(message);
     this.status = status;
     this.code = code;
@@ -7,8 +9,10 @@ class HttpError extends Error {
   }
 }
 
-function errorHandler(err, req, res, next) {
-  if (res.headersSent) {
+function errorHandler(err, req, res, next)
+{
+  if (res.headersSent)
+  {
     return next(err);
   }
 
@@ -19,9 +23,12 @@ function errorHandler(err, req, res, next) {
     code: err.code || 'INTERNAL_ERROR',
     message: err.message || 'Internal server error',
     path: req.originalUrl,
+    requestId: req.requestId,
+    traceId: req.traceId,
   };
 
-  if (status === 400 && Array.isArray(err.errors) && err.errors.length > 0) {
+  if (status === 400 && Array.isArray(err.errors) && err.errors.length > 0)
+  {
     body.errors = err.errors;
   }
 

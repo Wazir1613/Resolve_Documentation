@@ -1,10 +1,9 @@
-// TEMPORARY: no auth enforced. Replace with real JWT validation once Authentication service exists.
 const express = require('express');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { idempotencyMiddleware } = require('../middleware/idempotency');
+const { authenticate } = require('../middleware/authenticate');
 const teamsController = require('./teams.controller');
 const {
-  requireOrganizationId,
   validateCreateTeam,
   validatePatchTeam,
   validateAddMember,
@@ -15,59 +14,59 @@ const {
 const router = express.Router();
 
 router.post(
-  '/',
-  idempotencyMiddleware,
-  requireOrganizationId,
-  validateCreateTeam,
-  asyncHandler(teamsController.createTeam)
+    '/',
+    idempotencyMiddleware,
+    authenticate,
+    validateCreateTeam,
+    asyncHandler(teamsController.createTeam)
 );
 
-router.get('/', requireOrganizationId, asyncHandler(teamsController.listTeams));
+router.get('/', authenticate, asyncHandler(teamsController.listTeams));
 
 router.get(
-  '/:id',
-  requireOrganizationId,
-  validateTeamIdParam,
-  asyncHandler(teamsController.getTeamById)
+    '/:id',
+    authenticate,
+    validateTeamIdParam,
+    asyncHandler(teamsController.getTeamById)
 );
 
 router.patch(
-  '/:id',
-  requireOrganizationId,
-  validateTeamIdParam,
-  validatePatchTeam,
-  asyncHandler(teamsController.patchTeam)
+    '/:id',
+    authenticate,
+    validateTeamIdParam,
+    validatePatchTeam,
+    asyncHandler(teamsController.patchTeam)
 );
 
 router.delete(
-  '/:id',
-  requireOrganizationId,
-  validateTeamIdParam,
-  asyncHandler(teamsController.deleteTeam)
+    '/:id',
+    authenticate,
+    validateTeamIdParam,
+    asyncHandler(teamsController.deleteTeam)
 );
 
 router.post(
-  '/:id/members',
-  idempotencyMiddleware,
-  requireOrganizationId,
-  validateTeamIdParam,
-  validateAddMember,
-  asyncHandler(teamsController.addMember)
+    '/:id/members',
+    idempotencyMiddleware,
+    authenticate,
+    validateTeamIdParam,
+    validateAddMember,
+    asyncHandler(teamsController.addMember)
 );
 
 router.get(
-  '/:id/members',
-  requireOrganizationId,
-  validateTeamIdParam,
-  asyncHandler(teamsController.listMembers)
+    '/:id/members',
+    authenticate,
+    validateTeamIdParam,
+    asyncHandler(teamsController.listMembers)
 );
 
 router.delete(
-  '/:id/members/:userId',
-  requireOrganizationId,
-  validateTeamIdParam,
-  validateMemberUserIdParam,
-  asyncHandler(teamsController.deleteMember)
+    '/:id/members/:userId',
+    authenticate,
+    validateTeamIdParam,
+    validateMemberUserIdParam,
+    asyncHandler(teamsController.deleteMember)
 );
 
 module.exports = router;
